@@ -8,7 +8,7 @@ export default function HomeScreen() {
 		<>
 			<h1 className="fw-semibold mb-3">RedactoPedia</h1>
 			<Tabs
-				defaultActiveKey="join"
+				defaultActiveKey="create"
 				id="home-tabs"
 				className="mb-3"
 				fill

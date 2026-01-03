@@ -1,7 +1,11 @@
+import { useState } from 'react';
+import { CreatorStateContext } from '../contexts/CreatorStateContext';
+import CreateGameForm from './CreateGameForm';
 export default function EditTab() {
+	const [creatorState, setCreatorState] = useState([]);
 	return (
-		<div>
-			Water (chemical formula H<sub>2</sub>O)
-		</div>
+		<CreatorStateContext value={{ creatorState, setCreatorState }}>
+			<CreateGameForm />
+		</CreatorStateContext>
 	);
 }
