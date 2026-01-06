@@ -1,6 +1,6 @@
 import type { RadioData } from '../types/RadioData';
 type RadioInputGroup = {
-	label: string;
+	label: string | null;
 	labelClass?: string | null;
 	name: string;
 	forceCheck?: boolean | null;
@@ -10,9 +10,14 @@ type RadioInputGroup = {
 export default function RadioGroup(props: RadioInputGroup) {
 	return (
 		<div className="d-flex flex-row w-100 mb-2">
-			<div
-				className={`m-auto me-2 f-1 text-start ${props.labelClass || ''}`}
-			>{`${props.label}: `}</div>
+			{props.label ? (
+				<div
+					className={`m-auto me-2 f-1 text-start ${props.labelClass || ''}`}
+				>{`${props.label}: `}</div>
+			) : (
+				''
+			)}
+
 			{props.options.map((el, i) => {
 				return (
 					<div key={i}>

@@ -1,46 +1,23 @@
-import { useContext, useState, type ChangeEvent } from 'react';
-import { CreatorStateContext } from '../contexts/CreatorStateContext';
+import {
+	useContext,
+	useState,
+	type ChangeEvent,
+	type Dispatch,
+	type MouseEventHandler,
+	type SetStateAction,
+} from 'react';
+// import { CreatorStateContext } from '../contexts/CreatorStateContext';
 import type { Token } from './types/Token';
-import type { Round } from './types/Round';
-
+import type { Round, Article } from './types/Round';
+import { categories } from './util/categories';
 // import type { RadioData } from './types/RadioData';
-const defaultWords = [
-	'a',
-	'the',
-	'an',
-	'for',
-	'and',
-	'nor',
-	'but',
-	'so',
-	'by',
-	'is',
-	'was',
-	'it',
-	"it's",
-	'its',
-	'their',
-	'he',
-	'she',
-	'they',
-	'their',
-	"they're",
-	'are',
-	'or',
-	'of',
-	'on',
-	'to',
-	'as',
-	'with',
-	'without',
-	'in',
-	"'s",
-];
-import axios from 'axios';
+import { defaultWords } from './util/defaultWords';
 import RadioGroup from './CreateGameForm/RadioGroup';
 import LabelCheckBox from './CreateGameForm/LabelCheckBox';
 import WordGroup from './CreateGameForm/WordGroup';
 import WordToken from './WordToken';
+import { PopUpMessageContext } from '../contexts/PopUpMessageContext';
+import { CreatorStateContext } from '../contexts/CreatorStateContext';
 
 /*
 Round object: 
@@ -69,50 +46,101 @@ Round object:
 }
 */
 
-export default function CreateGameForm() {
-	const { creatorState } = useContext(CreatorStateContext);
+export default function CreateGameForm(props: {
+	setShow: Dispatch<SetStateAction<boolean>>;
+}) {
+	const { setShow } = props;
+	const {
+		creatorState,
+		setCreatorState,
+		selectedRound,
+		setSelectedRound,
+		article,
+		setArticle,
+	} = useContext(CreatorStateContext);
 	const [canMoveRight, setCanMoveRight] = useState<boolean>(false);
 	const [canMoveLeft, setCanMoveLeft] = useState<boolean>(false);
+	const showMessage = useContext(PopUpMessageContext);
 
+	const clearRound = () => {
+		//clear the category
+		const cs = document.querySelector('#category-select') as HTMLSelectElement;
+		if (cs) cs.selectedIndex = 0;
+		//clear the article
+		if (setArticle)
+			setArticle({
+				title: '',
+				type: 'regular',
+				category: '',
+				text: '',
+				tokens: [],
+				round: null,
+				groups: [],
+			});
+	};
+	const handleRoundSelect = (e: React.ChangeEvent) => {
+		const tgt = e.currentTarget as HTMLSelectElement;
+		if (!tgt) return;
+		const val = Number(tgt.selectedIndex);
+		if (isNaN(val)) return;
+		setSelectedRound(val);
+		if (val === 0) return clearRound();
+
+		console.log(creatorState[val - 1]);
+		setArticle({
+			...creatorState[val - 1],
+			round: val - 1,
+		});
+	};
+
+	//handle the selected words in the word list area
 	const handleBoxState = (e: ChangeEvent) => {
 		const tgt: HTMLInputElement = e.currentTarget as HTMLInputElement;
 		const side = tgt.closest('.side-panel');
 		if (!side) return;
 		//left side was changed
 		if (side.getAttribute('id') === 'word-list') {
+			//if we unchecked something, see if anything is still checked
 			if (!tgt.checked) {
 				const checkedItems = side.querySelectorAll(
 					'input[type="checkbox"]:checked'
 				).length;
+				//if not, disable the >> button and return
 				if (checkedItems === 0) return setCanMoveRight(false);
 			}
+			//enable the >> button if anything was checked (or if we checked something on the left)
 			setCanMoveRight(true);
 		}
 	};
 
-	type Article = Round & { round: number | null };
-
-	//
+	//handle the selected boxes in existing groups
 	const handleGroupState = (e: ChangeEvent) => {
 		const tgt: HTMLInputElement = e.currentTarget as HTMLInputElement;
 		const group = tgt.closest('.word-group');
 		const side = tgt.closest('.side-panel');
 		if (!group || !side) return;
+		//get all checked boxes on the right side
 		const allBoxes: Array<HTMLInputElement> = Array.from(
 			side?.querySelectorAll('input[type="checkbox"]:checked'),
 			(x) => x as HTMLInputElement
 		);
+		//if they're not part of the same group as the one we just checked, uncheck them
+		//(i.e. only one group may have checked boxes at any time)
 		allBoxes.forEach((b: HTMLInputElement) => {
 			const p = b.closest('.word-group');
 			if (p !== group) b.checked = false;
 		});
+		//if something on the right was checked/unchecked
 		if (side.getAttribute('id') === 'group-list') {
+			//if we unchecked something, see if anything is still checked
 			if (!tgt.checked) {
 				const checkedItems = side.querySelectorAll(
 					'input[type="checkbox"]:checked'
 				).length;
+				//and if not, we disable the << button
 				if (checkedItems === 0) return setCanMoveLeft(false);
 			}
+			//endable the << button otherwise
 			setCanMoveLeft(true);
 		}
 	};
@@ -192,8 +220,6 @@ export default function CreateGameForm() {
 
 		if (words.length === 0 || !selectedGroup) return;
 
-		console.log(selectedGroup);
-
 		//actual group in the data
 		const groupId = Number(selectedGroup.getAttribute('data-id'));
 		const group = article.groups.find((g) => g.id === groupId);
@@ -238,54 +264,60 @@ export default function CreateGameForm() {
 		});
 	};
 
-	const [article, setArticle] = useState<Article>({
-		title: '',
-		type: 'regular',
-		text: '',
-		tokens: [],
-		round: null,
-		groups: [],
-	});
 	const maxArticleLength = 2000;
 
-	const getTitle = () => {
-		const t: HTMLInputElement | null = document.querySelector('#round-title');
-		if (!t || !t.value) return null;
-		return t.value;
-	};
-
 	const openWikipediaPage = () => {
-		const title: string | null = getTitle();
+		const title: string | null = article.title;
 		if (!title) return;
 		window.open(`https://en.wikipedia.org/wiki/${title.split(' ').join('_')}`);
 	};
 
 	const populateSummary = async () => {
-		const title: string | null = getTitle();
+		const title: string | null = article.title;
 		if (!title) return;
-		const result = await axios.get(
-			`https://en.wikipedia.org/api/rest_v1/page/summary/${title
-				.split(' ')
-				.join('%20')}`
-		);
-		if (!result || !result.data?.extract) return;
-		setArticle((prev: Article) => {
-			return {
-				...prev,
-				text: result.data.extract,
-				tokens: getPreview(result.data.extract),
+		const mode = import.meta.env.MODE;
+		const url = mode === 'development' ? 'http://localhost:3000' : '';
+		const req = new XMLHttpRequest();
+		if (req.readyState === 0 || req.readyState === 4) {
+			req.open('GET', `${url}/api/v1/${title.split(' ').join('%20')}`, true);
+			req.onreadystatechange = () => {
+				if (req.readyState == 4) {
+					if (req.status === 200) {
+						const result = JSON.parse(req.response);
+						if (result && result.extract) {
+							setArticle((prev: Article) => {
+								return {
+									...prev,
+									text: result.extract,
+									tokens: getPreview(result.extract),
+								};
+							});
+						} else {
+							console.log(result);
+						}
+					} else {
+						console.log(req.response);
+					}
+				}
 			};
-		});
+			// req.setRequestHeader('Content-type', 'application/json; charset=utf-8');
+			try {
+				req.send(null);
+			} catch (err) {
+				console.log(err);
+			}
+		}
 	};
 
 	// const re = /[A-Za-z\p{L}]+'s|[A-Za-z\p{L}]+|[0-9]+(th|st|nd|rd)?|\n/gu;
 	const re = /[A-Za-z\p{L}]+|[0-9]+(th|st|nd|rd)?|'s|\n/gu;
 
 	const getPreview = (str: string) => {
+		if (!str) return [];
 		const arr = Array.from(str.trim().matchAll(re), (x) => x);
 		const tokens: Array<Token> = [];
 		let currentIndex = 0;
-		const title: string | null = getTitle();
+		const title: string | null = article.title;
 		if (!title) return [];
 		const titleWords = title.toLowerCase().split(' ');
 		arr.forEach((el) => {
@@ -350,14 +382,6 @@ export default function CreateGameForm() {
 
 	const [loadedWord, setLoadedWord] = useState<Token | null>(null);
 
-	const [selectedRound, setSelectedRound] = useState(0);
-	const handleRoundSelect = (e: React.ChangeEvent) => {
-		const tgt = e.currentTarget as HTMLSelectElement;
-		if (!tgt) return;
-		const val = Number(tgt.selectedIndex);
-		if (isNaN(val)) return;
-		setSelectedRound(val);
-	};
 	const handleChangeHidden = (e: React.ChangeEvent) => {
 		if (!loadedWord) return;
 		const tgt = e.currentTarget as HTMLInputElement;
@@ -488,25 +512,175 @@ export default function CreateGameForm() {
 		});
 	};
 
+	const handleRoundType = (e: React.ChangeEvent) => {
+		if (!article) return;
+		const tgt = e.currentTarget as HTMLInputElement;
+		const type = tgt.value as 'regular' | 'quick';
+		if (type !== 'regular' && type !== 'quick') return;
+		setArticle((prev) => {
+			return {
+				...prev,
+				type,
+			};
+		});
+	};
+
+	const handleSaveRound = () => {
+		if (!setCreatorState) return;
+		//if we are adding a new round
+		if (selectedRound === 0) {
+			console.log('creating new round');
+			setCreatorState((prev) => {
+				return [...prev, article];
+			});
+			setSelectedRound(creatorState.length + 1);
+		}
+		//saving a previous round
+		else {
+			console.log('saving round');
+
+			setCreatorState((prev) => {
+				return prev.map((rd, i) => {
+					if (selectedRound === i + 1) return article;
+					return rd;
+				});
+			});
+		}
+		showMessage('info', 'Round saved!', 1500);
+	};
+
+	const handleChangeCategory = (e: React.ChangeEvent) => {
+		const tgt = e.currentTarget as HTMLSelectElement;
+		const val = tgt.value;
+		if (val !== '' && !categories.includes(val)) return;
+		setArticle((prev) => {
+			return {
+				...prev,
+				category: val,
+			};
+		});
+	};
+
+	const handleMoveRound: MouseEventHandler<HTMLButtonElement> = (e) => {
+		const tgt = e.currentTarget as HTMLButtonElement;
+		if (!tgt) return;
+		if (tgt.id === 'move-round-down') {
+			if (selectedRound === creatorState.length || selectedRound === 0)
+				return showMessage('error', 'Cannot move round', 1500);
+			setCreatorState((prev) => {
+				const newState = [...prev];
+				[newState[selectedRound - 1], newState[selectedRound]] = [
+					newState[selectedRound],
+					newState[selectedRound - 1],
+				];
+				return newState;
+			});
+			setSelectedRound((prev) => prev + 1);
+			setArticle({ ...creatorState[selectedRound], round: selectedRound });
+		} else if (tgt.id === 'move-round-up') {
+			if (selectedRound <= 1)
+				return showMessage('error', 'Cannot move round', 1500);
+			setCreatorState((prev) => {
+				const newState = [...prev];
+				[newState[selectedRound - 2], newState[selectedRound - 1]] = [
+					newState[selectedRound - 1],
+					newState[selectedRound - 2],
+				];
+				return newState;
+			});
+			setSelectedRound((prev) => prev - 1);
+			setArticle({ ...creatorState[selectedRound], round: selectedRound });
+			console.log(article);
+		}
+	};
+
 	return (
-		<form
+		<div
 			id="create-game-form"
-			className="m-auto w-75"
-			onSubmit={(e) => e.preventDefault()}
+			className="d-flex flex-column align-items-stretch m-auto w-75 position-relative"
 		>
-			{/* select round */}
+			<div className="form-top">
+				{/* select round */}
+
+				<div className="input-container">
+					<div className="input-label">Select round</div>
+					<select
+						id="creator-round-select"
+						className="w-100"
+						onChange={handleRoundSelect}
+						value={`${selectedRound || 0}`}
+					>
+						<option value="0">[Add new]</option>
+						{(creatorState || []).map((r: Round, i: number) => {
+							return (
+								<option key={i} value={i + 1}>
+									{`${i + 1}. ${r.title}${r.type === 'quick' ? ' 🏃💨' : ''}`}
+								</option>
+							);
+						})}
+					</select>
+				</div>
+				<div className="d-flex flex-row mb-2">
+					<button
+						role="button"
+						className="btn btn-primary w-100 mb-4 me-2"
+						id="move-round-up"
+						disabled={selectedRound <= 1}
+						onClick={handleMoveRound}
+					>
+						Move Round ▲
+					</button>
+					<button
+						role="button"
+						className="btn btn-primary w-100 mb-4"
+						id="move-round-down"
+						disabled={
+							selectedRound === 0 || selectedRound === creatorState.length
+						}
+						onClick={handleMoveRound}
+					>
+						Move Round ▼
+					</button>
+				</div>
+				<div className="d-flex flex-row mb-2">
+					<button
+						role="button"
+						className="btn btn-primary w-100 mb-4 me-2"
+						disabled={
+							!article?.title ||
+							article.title.trim() === '' ||
+							article.text.trim() === ''
+						}
+						onClick={handleSaveRound}
+					>
+						Save Round
+					</button>
+					<button
+						role="button"
+						className="btn btn-danger w-100 mb-4"
+						onClick={() => {
+							setShow(true);
+						}}
+					>
+						{selectedRound === 0 ? 'Clear Round' : 'Delete Round'}
+					</button>
+				</div>
+			</div>
+
 			<div className="input-container">
-				<div className="input-label">Select round</div>
+				<div className="input-label">Category</div>
 				<select
-					id="creator-round-select"
+					name="category"
+					id="category-select"
 					className="w-100"
-					onChange={handleRoundSelect}
+					onChange={handleChangeCategory}
+					value={article.category}
 				>
-					<option value="0">[Add new]</option>
-					{(creatorState || []).map((r: Round, i: number) => {
+					<option value="0">[Select a category]</option>
+					{categories.map((c, i) => {
 						return (
-							<option key={i} value={i + 1} selected={selectedRound === i + 1}>
-								{r.title}
+							<option key={i} value={c}>
+								{c}
 							</option>
 						);
 					})}
@@ -531,6 +705,32 @@ export default function CreateGameForm() {
 					maxLength={50}
 				></input>
 			</div>
+			{/* round type */}
+			<div className="input-container">
+				<div className="input-label">Round Type</div>
+				<RadioGroup
+					label=""
+					name={'round-type'}
+					forceCheck={true}
+					options={[
+						{
+							id: 'round-regular',
+							value: 'regular',
+							label: 'Regular',
+							checked: article.type === 'regular',
+							disabled: article === null,
+						},
+						{
+							id: 'round-quick',
+							value: 'quick',
+							label: 'Quick',
+							checked: article.type === 'quick',
+							disabled: article === null,
+						},
+					]}
+					onChange={handleRoundType}
+				/>
+			</div>
 			{/* buttons to open Wikipedia or populate the summary */}
 			<div className="d-flex flex-row w-100 mb-3">
 				<button
@@ -552,7 +752,11 @@ export default function CreateGameForm() {
 			<div className="input-container">
 				<div className="input-label">
 					Text{' '}
-					<span>{`(${article.text.length}/${maxArticleLength}) chars used`}</span>
+					<span>
+						{article?.text
+							? `(${article.text.length}/${maxArticleLength}) chars used`
+							: ''}
+					</span>
 				</div>
 				<textarea
 					className="w-100"
@@ -573,17 +777,21 @@ export default function CreateGameForm() {
 			{/* article preview */}
 			<div className="input-container">
 				{/* Article title */}
-				<div className="input-label">{`Preview: ${
-					article.text.length > 0
-						? `${
-								article.title.length +
-								article.tokens.reduce((p, c) => {
-									if (c.type === 'hidden') return p + c.word.length;
-									return p;
-								}, 0)
-						  } possible points`
-						: ''
-				}`}</div>
+				<div className="input-label">
+					{article?.text
+						? `Preview: ${
+								article.text.length > 0
+									? `${
+											article.title.length +
+											article.tokens.reduce((p, c) => {
+												if (c.type === 'hidden') return p + c.word.length;
+												return p;
+											}, 0)
+									  } possible points`
+									: ''
+						  }`
+						: ''}
+				</div>
 				<h2 className="text-preview title-preview fw-semibold">
 					{getPreview(article.title).map((t, i) => {
 						return (
@@ -601,136 +809,156 @@ export default function CreateGameForm() {
 				</h2>
 				{/* article text with highlighted words */}
 				<div className="text-preview">
-					{article.tokens.map((el, i) => {
-						const clickFn = el.isHideable
-							? () => {
-									if (loadedWord?.id === el.id) setLoadedWord(null);
-									else setLoadedWord(el);
-							  }
-							: () => {};
-						const isLoaded = el.id === loadedWord?.id;
-						const isHighlighted = checkGroupMatch(el, loadedWord);
-						return (
-							<WordToken
-								token={el}
-								loadedWord={isLoaded}
-								highlighted={isHighlighted}
-								onClick={clickFn}
-								key={i}
-							/>
-						);
-					})}
+					{article?.tokens
+						? article.tokens.map((el, i) => {
+								const clickFn = el.isHideable
+									? () => {
+											if (loadedWord?.id === el.id) setLoadedWord(null);
+											else setLoadedWord(el);
+									  }
+									: () => {};
+								const isLoaded = el.id === loadedWord?.id;
+								const isHighlighted = checkGroupMatch(el, loadedWord);
+								return (
+									<WordToken
+										token={el}
+										loadedWord={isLoaded}
+										highlighted={isHighlighted}
+										onClick={clickFn}
+										key={i}
+									/>
+								);
+						  })
+						: ''}
 				</div>
 			</div>
-			{/* article text preview with hidden words highlighted */}
-			<div className={`word-container align-items-start`}>
-				<h3>{loadedWord ? loadedWord.word : `No word loaded`}</h3>
-				<RadioGroup
-					label={'State'}
-					name={'hidden'}
-					forceCheck={false}
-					options={[
-						{
-							id: 'word-title',
-							value: 'title',
-							label: 'Title',
-							checked: loadedWord ? loadedWord.type === 'title' : false,
-							disabled: loadedWord === null || !loadedWord.isHideable,
-						},
+			{/* word formatting */}
+			<div
+				className={`word-container align-items-start${
+					!article?.text || article.text.trim().length === 0 ? ' d-none' : ''
+				}`}
+			>
+				<h3>{loadedWord ? loadedWord.word : `No word selected`}</h3>
+				<div className="input-container">
+					<div className="input-label">State</div>
+					<RadioGroup
+						label={''}
+						name={'hidden'}
+						forceCheck={false}
+						options={[
+							{
+								id: 'word-title',
+								value: 'title',
+								label: 'Title',
+								checked: loadedWord ? loadedWord.type === 'title' : false,
+								disabled: loadedWord === null || !loadedWord.isHideable,
+							},
 
-						{
-							id: 'word-hidden',
-							value: 'hidden',
-							label: 'Hidden',
-							checked: loadedWord ? loadedWord.type === 'hidden' : false,
-							disabled:
-								loadedWord === null ||
-								!loadedWord.isHideable ||
-								!loadedWord.isShowable,
-						},
-						{
-							id: 'word-shown',
-							value: 'shown',
-							label: 'Shown',
-							checked: loadedWord ? loadedWord.type === 'shown' : false,
-							disabled:
-								!loadedWord || !loadedWord.isHideable || !loadedWord.isShowable,
-						},
-					]}
-					onChange={handleChangeHidden}
-				/>
-				<div className={'input-label'}>Formatting</div>
-				<RadioGroup
-					label={'Bold/Italic'}
-					name={'formatting'}
-					forceCheck={false}
-					options={[
-						{
-							id: 'format-none',
-							value: 'none',
-							label: 'Neither',
-							checked:
-								loadedWord !== null && !loadedWord.bold && !loadedWord.italic,
-							disabled: !loadedWord,
-						},
-						{
-							id: 'format-bold',
-							value: 'bold',
-							label: 'Bold',
-							className: 'fw-bold',
-							checked:
-								loadedWord !== null && loadedWord.bold && !loadedWord.italic,
-							disabled: !loadedWord,
-						},
-						{
-							id: 'format-italic',
-							value: 'italic',
-							label: 'Italic',
-							className: 'fst-italic',
-							checked:
-								loadedWord !== null && !loadedWord.bold && loadedWord.italic,
-							disabled: !loadedWord,
-						},
-						{
-							id: 'format-both',
-							value: 'bold-italic',
-							label: 'Both',
-							className: 'fw-bold fst-italic',
-							checked:
-								loadedWord !== null && loadedWord.bold && loadedWord.italic,
-							disabled: !loadedWord,
-						},
-					]}
-					onChange={handleChangeFormatting}
-				/>
-				<RadioGroup
-					label={'Placement'}
-					name="placement"
-					options={[
-						{
-							id: 'loc-subscript',
-							value: 'sub',
-							label: 'Subscript',
-							checked: loadedWord !== null && loadedWord.placement === 'sub',
-							disabled: !loadedWord,
-						},
-						{
-							id: 'loc-none',
-							value: 'none',
-							label: 'Normal',
-							checked: loadedWord === null || loadedWord.placement === 'none',
-							disabled: !loadedWord,
-						},
-						{
-							id: 'loc-superscript',
-							value: 'super',
-							label: 'Superscript',
-							checked: loadedWord !== null && loadedWord.placement === 'super',
-							disabled: !loadedWord,
-						},
-					]}
-					onChange={handleChangePlacement}
-				/>
+							{
+								id: 'word-hidden',
+								value: 'hidden',
+								label: 'Hidden',
+								checked: loadedWord ? loadedWord.type === 'hidden' : false,
+								disabled:
+									loadedWord === null ||
+									!loadedWord.isHideable ||
+									!loadedWord.isShowable,
+							},
+							{
+								id: 'word-shown',
+								value: 'shown',
+								label: 'Shown',
+								checked: loadedWord ? loadedWord.type === 'shown' : false,
+								disabled:
+									!loadedWord ||
+									!loadedWord.isHideable ||
+									!loadedWord.isShowable,
+							},
+						]}
+						onChange={handleChangeHidden}
+					/>
+				</div>
+
+				<div className="input-container">
+					<div className="input-label">Format: Bold/Italic</div>
+					<RadioGroup
+						label={''}
+						name={'formatting'}
+						forceCheck={false}
+						options={[
+							{
+								id: 'format-none',
+								value: 'none',
+								label: 'N/A',
+								checked:
+									loadedWord !== null && !loadedWord.bold && !loadedWord.italic,
+								disabled: !loadedWord,
+							},
+							{
+								id: 'format-bold',
+								value: 'bold',
+								label: 'B',
+								className: 'fw-bold',
+								checked:
+									loadedWord !== null && loadedWord.bold && !loadedWord.italic,
+								disabled: !loadedWord,
+							},
+							{
+								id: 'format-italic',
+								value: 'italic',
+								label: 'I',
+								className: 'fst-italic',
+								checked:
+									loadedWord !== null && !loadedWord.bold && loadedWord.italic,
+								disabled: !loadedWord,
+							},
+							{
+								id: 'format-both',
+								value: 'bold-italic',
+								label: 'BI',
+								className: 'fw-bold fst-italic',
+								checked:
+									loadedWord !== null && loadedWord.bold && loadedWord.italic,
+								disabled: !loadedWord,
+							},
+						]}
+						onChange={handleChangeFormatting}
+					/>
+				</div>
+
+				<div className="input-container">
+					<div className="input-label">Format: Placement</div>
+					<RadioGroup
+						label={''}
+						name="placement"
+						options={[
+							{
+								id: 'loc-subscript',
+								value: 'sub',
+								label: 'Subscript',
+								checked: loadedWord !== null && loadedWord.placement === 'sub',
+								disabled: !loadedWord,
+							},
+							{
+								id: 'loc-none',
+								value: 'none',
+								label: 'Normal',
+								checked: loadedWord === null || loadedWord.placement === 'none',
+								disabled: !loadedWord,
+							},
+							{
+								id: 'loc-superscript',
+								value: 'super',
+								label: 'Superscript',
+								checked:
+									loadedWord !== null && loadedWord.placement === 'super',
+								disabled: !loadedWord,
+							},
+						]}
+						onChange={handleChangePlacement}
+					/>
+				</div>
+
 				{/* Format all occurrences button */}
 				<div className="d-flex flex-row w-100">
 					<button
@@ -743,104 +971,117 @@ export default function CreateGameForm() {
 				</div>
 			</div>
 			{/* word groupings */}
-			<div className="fw-bold text-start">Groupings</div>
-			<div className="group-container">
-				<div className="d-flex flex-column f-1">
-					<div className="fw-semibold">Ungrouped words</div>
-					<div id="word-list" className="word-list side-panel">
-						{article.tokens.length > 0
-							? (() => {
-									const tokens = article.tokens
-										.map((t) => {
-											return { ...t };
+			<div
+				className={`d-flex flex-column${
+					!article?.text || article.text.trim().length === 0 ? ' d-none' : ''
+				}`}
+			>
+				<div className="fw-bold text-start">Groupings</div>
+				<div className="group-container">
+					<div className="d-flex flex-column f-1">
+						<div className="fw-semibold">Ungrouped words</div>
+						<div id="word-list" className="word-list side-panel">
+							{article?.tokens?.length > 0
+								? (() => {
+										const tokens = article.tokens
+											.map((t) => {
+												return { ...t };
+											})
+											.filter((t) => !t.groupId)
+											.sort((a, b) =>
+												a.word.toLowerCase().localeCompare(b.word.toLowerCase())
+											);
+										const uniqueTokens = tokens.filter((t, i) => {
+											return (
+												t.type === 'hidden' &&
+												(i === 0 ||
+													t.word.toLowerCase() !==
+														tokens[i - 1].word.toLowerCase())
+											);
+										});
+										return uniqueTokens.map((t, i) => {
+											return (
+												<LabelCheckBox
+													key={i}
+													label={t.word}
+													value={t.id?.toString() || ''}
+													id={`check-${t.id || i}`}
+													labelClass="token-label"
+													onChange={handleBoxState}
+												/>
+											);
+										});
+								  })()
+								: 'No words detected'}
+						</div>
+					</div>
+					<div className="button-panel">
+						<div className="d-flex flex-column m-auto mx-1">
+							<button
+								className="btn btn-primary my-1 move-right"
+								disabled={!canMoveRight}
+								onClick={handleGroupWords}
+							>
+								{'▶'}
+							</button>
+							<button
+								className="btn btn-primary my-1 move-left"
+								disabled={!canMoveLeft}
+								onClick={handleUngroupWords}
+							>
+								{'◀'}
+							</button>
+						</div>
+					</div>
+					<div className="d-flex flex-column f-1">
+						<div className="fw-semibold">Groups</div>
+						<div id="group-list" className="group-list side-panel">
+							<WordGroup
+								words={(() => {
+									const tokens = article?.tokens
+										? article.tokens
+												.map((t) => {
+													return { ...t };
+												})
+												.filter((t) => t.type === 'title')
+												.sort((a, b) =>
+													a.word
+														.toLowerCase()
+														.localeCompare(b.word.toLowerCase())
+												)
+										: [];
+
+									return tokens
+										.filter((t, i) => {
+											return (
+												i === 0 ||
+												t.word.toLowerCase() !==
+													tokens[i - 1].word.toLowerCase()
+											);
 										})
-										.filter((t) => !t.groupId)
 										.sort((a, b) =>
 											a.word.toLowerCase().localeCompare(b.word.toLowerCase())
-										);
-									const uniqueTokens = tokens.filter((t, i) => {
+										)
+										.map((t) => t.word.toLowerCase());
+								})()}
+								groupId={0}
+							/>
+							{article?.groups
+								? article.groups.map((g, i) => {
 										return (
-											t.type === 'hidden' &&
-											(i === 0 ||
-												t.word.toLowerCase() !==
-													tokens[i - 1].word.toLowerCase())
-										);
-									});
-									return uniqueTokens.map((t, i) => {
-										return (
-											<LabelCheckBox
+											<WordGroup
+												words={g.words}
 												key={i}
-												label={t.word}
-												value={t.id?.toString() || ''}
-												id={`check-${t.id || i}`}
-												labelClass="token-label"
-												onChange={handleBoxState}
+												groupId={g.id}
+												onChange={handleGroupState}
 											/>
 										);
-									});
-							  })()
-							: 'No words detected'}
-					</div>
-				</div>
-				<div className="button-panel">
-					<div className="d-flex flex-column m-auto mx-1">
-						<button
-							className="btn btn-primary my-1 move-right"
-							disabled={!canMoveRight}
-							onClick={handleGroupWords}
-						>
-							{'▶'}
-						</button>
-						<button
-							className="btn btn-primary my-1 move-left"
-							disabled={!canMoveLeft}
-							onClick={handleUngroupWords}
-						>
-							{'◀'}
-						</button>
-					</div>
-				</div>
-				<div className="d-flex flex-column f-1">
-					<div className="fw-semibold">Groups</div>
-					<div id="group-list" className="group-list side-panel">
-						<WordGroup
-							words={(() => {
-								const tokens = article.tokens
-									.map((t) => {
-										return { ...t };
-									})
-									.filter((t) => t.type === 'title')
-									.sort((a, b) =>
-										a.word.toLowerCase().localeCompare(b.word.toLowerCase())
-									);
-
-								return tokens
-									.filter((t, i) => {
-										return (
-											i === 0 ||
-											t.word.toLowerCase() !== tokens[i - 1].word.toLowerCase()
-										);
-									})
-									.sort((a, b) =>
-										a.word.toLowerCase().localeCompare(b.word.toLowerCase())
-									)
-									.map((t) => t.word.toLowerCase());
-							})()}
-							groupId={0}
-						/>
-						{article.groups.map((g, i) => {
-							return (
-								<WordGroup
-									words={g.words}
-									key={i}
-									groupId={g.id}
-									onChange={handleGroupState}
-								/>
-							);
-						})}
+								  })
+								: ''}
+						</div>
 					</div>
 				</div>
 			</div>
-		</form>
+		</div>
 	);
 }
