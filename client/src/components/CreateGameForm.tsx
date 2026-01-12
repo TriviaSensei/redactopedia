@@ -18,7 +18,7 @@ import WordGroup from './CreateGameForm/WordGroup';
 import WordToken from './WordToken';
 import { PopUpMessageContext } from '../contexts/PopUpMessageContext';
 import { CreatorStateContext } from '../contexts/CreatorStateContext';
-
+// import { saveAs } from 'file-saver';
 /*
 Round object: 
 {
@@ -272,6 +272,7 @@ export default function CreateGameForm(props: {
 		window.open(`https://en.wikipedia.org/wiki/${title.split(' ').join('_')}`);
 	};
 
+	const [populating, setPopulating] = useState(false);
 	const populateSummary = async () => {
 		const title: string | null = article.title;
 		if (!title) return;
@@ -298,10 +299,12 @@ export default function CreateGameForm(props: {
 					} else {
 						console.log(req.response);
 					}
+					setPopulating(false);
 				}
 			};
 			// req.setRequestHeader('Content-type', 'application/json; charset=utf-8');
 			try {
+				setPopulating(true);
 				req.send(null);
 			} catch (err) {
 				console.log(err);
@@ -529,7 +532,6 @@ export default function CreateGameForm(props: {
 		if (!setCreatorState) return;
 		//if we are adding a new round
 		if (selectedRound === 0) {
-			console.log('creating new round');
 			setCreatorState((prev) => {
 				return [...prev, article];
 			});
@@ -537,8 +539,6 @@ export default function CreateGameForm(props: {
 		}
 		//saving a previous round
 		else {
-			console.log('saving round');
-
 			setCreatorState((prev) => {
 				return prev.map((rd, i) => {
 					if (selectedRound === i + 1) return article;
@@ -546,6 +546,7 @@ export default function CreateGameForm(props: {
 				});
 			});
 		}
+		setLoadedWord(null);
 		showMessage('info', 'Round saved!', 1500);
 	};
 
@@ -594,6 +595,18 @@ export default function CreateGameForm(props: {
 		}
 	};
 
+	const handleDownloadFile = async () => {
+		const json = JSON.stringify({ rounds: [...creatorState] });
+		const blob = new Blob([json], { type: 'application/json' });
+		const href = await URL.createObjectURL(blob);
+		const dlAnchorElem = document.createElement('a');
+		dlAnchorElem.setAttribute('href', href);
+		dlAnchorElem.setAttribute('download', 'game.json');
+		dlAnchorElem.click();
+		dlAnchorElem.remove();
+	};
+	const handleLoadFile = () => {};
+
 	return (
 		<div
 			id="create-game-form"
@@ -601,7 +614,32 @@ export default function CreateGameForm(props: {
 		>
 			<div className="form-top">
 				{/* select round */}
+				<div className="d-flex flex-row mb-1">
+					<input
+						type="file"
+						id="load-file"
+						accept=".json"
+						onChange={handleLoadFile}
+					></input>
 
+					<button
+						role="button"
+						className="btn btn-secondary w-100 mb-2 me-2"
+						onClick={handleLoadFile}
+					>
+						<label htmlFor="load-file" className="w-100 h-100">
+							Load File
+						</label>
+					</button>
+					<button
+						role="button"
+						className="btn btn-primary w-100 mb-2"
+						disabled={creatorState.length === 0}
+						onClick={handleDownloadFile}
+					>
+						Download File
+					</button>
+				</div>
 				<div className="input-container">
 					<div className="input-label">Select round</div>
 					<select
@@ -620,10 +658,10 @@ export default function CreateGameForm(props: {
 						})}
 					</select>
 				</div>
-				<div className="d-flex flex-row mb-2">
+				<div className="d-flex flex-row mb-3">
 					<button
 						role="button"
-						className="btn btn-primary w-100 mb-4 me-2"
+						className="btn btn-primary w-100 me-2"
 						id="move-round-up"
 						disabled={selectedRound <= 1}
 						onClick={handleMoveRound}
@@ -632,7 +670,7 @@ export default function CreateGameForm(props: {
 					</button>
 					<button
 						role="button"
-						className="btn btn-primary w-100 mb-4"
+						className="btn btn-primary w-100"
 						id="move-round-down"
 						disabled={
 							selectedRound === 0 || selectedRound === creatorState.length
@@ -642,10 +680,10 @@ export default function CreateGameForm(props: {
 						Move Round ▼
 					</button>
 				</div>
-				<div className="d-flex flex-row mb-2">
+				<div className="d-flex flex-row mb-3">
 					<button
 						role="button"
-						className="btn btn-primary w-100 mb-4 me-2"
+						className="btn btn-primary w-100 me-2"
 						disabled={
 							!article?.title ||
 							article.title.trim() === '' ||
@@ -655,9 +693,10 @@ export default function CreateGameForm(props: {
 					>
 						Save Round
 					</button>
+
 					<button
 						role="button"
-						className="btn btn-danger w-100 mb-4"
+						className="btn btn-danger w-100"
 						onClick={() => {
 							setShow(true);
 						}}
@@ -744,6 +783,7 @@ export default function CreateGameForm(props: {
 					className={'btn btn-warning f-1'}
 					type="button"
 					onClick={populateSummary}
+					disabled={populating}
 				>
 					Populate Summary
 				</button>

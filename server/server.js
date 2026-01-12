@@ -15,7 +15,6 @@ const server = app.listen(port, () => {
 const http = require('http').Server(app);
 
 const getArticle = async (req, res, next) => {
-	console.log(req.params.title);
 	const result = await axios.get(
 		`https://en.wikipedia.org/api/rest_v1/page/summary/${req.params.title
 			.split(' ')

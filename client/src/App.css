@@ -121,7 +121,6 @@ body {
 	select {
 		height: 2.5em;
 	}
-
 	.text-preview {
 		width: 100%;
 		max-width: 100%;
@@ -156,6 +155,10 @@ input[type='radio']:disabled + label {
 input[type='radio']:checked + label {
 	background-color: var(--radio-checked);
 	color: var(--bg-color);
+}
+
+input[type='file'] {
+	display: none;
 }
 
 #create-game-form {
